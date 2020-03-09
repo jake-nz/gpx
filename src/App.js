@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import './App.css'
-import { Map, Marker, Popup, TileLayer } from 'react-leaflet'
+import { Map, Marker, Popup, TileLayer, Polyline } from 'react-leaflet'
+import karnak from './karnak'
 
 const readFile = file =>
   new Promise(resolve => {
@@ -33,48 +34,80 @@ const trkToText = trk => {
   for (const segment of segments) {
     const points = segment.getElementsByTagName('trkpt')
     for (const point of points) {
-      text += point.getAttribute('lat') + ', ' + point.getAttribute('lon') + '\n'
+      text +=
+        point.getAttribute('lat') + ', ' + point.getAttribute('lon') + '\n'
     }
     text += '\n'
   }
   return text
 }
 
-const gpxToText = gpx => {
-  const tracks = gpx.getElementsByTagName('trk')
-  if (tracks.length === 1) {
-    return trkToText(tracks[0])
-  } else {
-    let text = ''
-    for (const trk of tracks) {
-      text += '## track\n' + trkToText(trk) + '\n'
-    }
-    return text
-  }
-}
+const parseGpx = gpx =>
+  Array.from(gpx.getElementsByTagName('trk')).map(parseTrk)
+const parseTrk = track =>
+  Array.from(track.getElementsByTagName('trkseg')).map(parseSeg)
+const parseSeg = segment =>
+  Array.from(segment.getElementsByTagName('trkpt')).map(parsePoint)
+const parsePoint = point => ({
+  lat: point.getAttribute('lat'),
+  lon: point.getAttribute('lon')
+})
 
-const Upload = ({ addTrack }) => {
+const Upload = ({ addFile }) => {
   const upload = async e => {
+    const target = e.target
     for (const file of e.target.files) {
       const xml = await readFile(file)
-      const gpx = await parseXml(xml)
-      window.gpx = gpx
-      const text = gpxToText(gpx)
-      console.log('# ' + file.name + '\n' + text)
-      addTrack('# ' + file.name + '\n' + text)
+      const gpxXml = await parseXml(xml)
+      window.gpx = gpxXml
+      const gpx = parseGpx(gpxXml)
+      console.log(gpx)
+      addFile({ name: file.name, gpx: gpx })
     }
+    target.value = null
   }
 
-  return <input type="file" accept=".gpx" onChange={upload} />
+  return <input type="file" accept=".gpx" onChange={upload} multiple />
 }
 
 function App() {
-  const [tracks, setTracks] = useState('')
-  const addTrack = track => setTracks(tracks + track)
-  const position = [-16.3937100131, 145.3324455407]
+  const [files, setFiles] = useState([karnak])
+  const addFile = file => setFiles([...files, file])
+
   return (
-    <div className="App">
-      <Map center={position} zoom={13}>
+    <div style={{ display: 'flex', height: '100vh' }}>
+      <div style={{ width: '20vw', height: '100%', overflow: 'scroll'}}>
+        <Upload addFile={addFile} />
+        {files.map(file => (
+          <div key={file.name}>
+            {file.name}
+            {file.tracks.map((track, i) => (
+              <div key={i}>
+                Track {i + 1}
+                {track.segments.map((segment, i) => (
+                  <div key={i}>
+                    Segment {i + 1}
+                    {console.log(segment)}
+                    {segment.points.map(point => (
+                      <div key={point.lat + point.lon}>
+                        {console.log(point)}
+                        {point.lat}, {point.lon}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <Map
+        center={[-16.3937100131, 145.3324455407]}
+        zoom={13}
+        zoomSnap={0.1}
+        maxZoom={15}
+        style={{ flex: 1 }}
+      >
         <TileLayer
           url="https://gisservices.information.qld.gov.au/arcgis/rest/services/Basemaps/QTopoBase_WebM/MapServer/tile/{z}/{y}/{x}"
           attribution="Qtopo"
@@ -83,15 +116,25 @@ function App() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
         /> */}
-        <Marker position={position}>
-          <Popup>
-            A pretty CSS3 popup.
-            <br />
-            Easily customizable.
-          </Popup>
-        </Marker>
+
+        {files.map(file =>
+          file.tracks.map(track =>
+            track.segments.map((segment, i) => (
+              <Polyline
+                key={file.name + track.name + i}
+                positions={segment.points.map(({ lat, lon }) => [lat, lon])}
+              />
+            ))
+          )
+        )}
+
+        {/* {files.map(file => (
+          <Polyline
+            key={file.name}
+            positions={file.tacks[0].segments[0].points.map(({ lat, lon }) => [lat, lon])}
+          />
+        ))} */}
       </Map>
-      <Upload addTrack={addTrack} />
     </div>
   )
 }
