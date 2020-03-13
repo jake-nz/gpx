@@ -3,6 +3,7 @@ export default {
 
   tracks: [
     {
+      name: 'Karnak Falls',
       segments: [
         {
           points: [
